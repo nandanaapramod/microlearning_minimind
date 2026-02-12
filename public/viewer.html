@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Viewer - MicroLearn</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+
+<body>
+    <header>
+        <div class="container">
+            <nav>
+                <div style="display: flex; align-items: center; gap: 1rem;">
+                    <a href="/dashboard.html" class="logo">← Back</a>
+                    <span id="doc-title" style="font-weight: 600;">Document Title</span>
+                </div>
+                <div class="nav-links">
+                    <button class="btn btn-outline" onclick="switchView('notes')" id="btn-notes">Notes</button>
+                    <button class="btn btn-outline" onclick="switchView('quiz')" id="btn-quiz">Quiz</button>
+                </div>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container" style="padding-top: 2rem; max-width: 800px;">
+
+        <!-- Notes View -->
+        <div id="view-notes">
+            <div id="notes-content"
+                style="background: var(--bg-card); padding: 2rem; border-radius: 1rem; border: 1px solid var(--border); line-height: 1.8;">
+                Loading notes...
+            </div>
+        </div>
+
+        <!-- Quiz View -->
+        <div id="view-quiz" class="hidden">
+            <div id="quiz-container"
+                style="background: var(--bg-card); padding: 2rem; border-radius: 1rem; border: 1px solid var(--border);">
+                <!-- Quiz generation here -->
+            </div>
+            <button class="btn btn-primary mt-4 hidden" id="submit-quiz" onclick="submitQuiz()">Submit Quiz</button>
+            <div id="quiz-result" class="mt-4 hidden text-center" style="font-size: 1.25rem; font-weight: bold;"></div>
+        </div>
+
+    </main>
+
+    <script src="app.js"></script>
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const noteId = urlParams.get('id');
+        let currentQuizData = null;
+
+        async function loadContent() {
+            if (!noteId) return window.location.href = '/dashboard.html';
+
+            try {
+                // Fetch Notes
+                const res = await fetch(`/api/notes/${noteId}`);
+                if (!res.ok) throw new Error('Note not found');
+                const note = await res.json();
+
+                document.getElementById('doc-title').textContent = note.title;
+                document.getElementById('notes-content').innerHTML = marked.parse(note.content);
+
+                // Fetch Quiz
+                const quizRes = await fetch(`/api/notes/${noteId}/quiz`);
+                if (quizRes.ok) {
+                    currentQuizData = await quizRes.json();
+                    renderQuiz(currentQuizData);
+                }
+            } catch (err) {
+                console.error(err);
+                alert('Error loading content');
+            }
+        }
+
+        function renderQuiz(quiz) {
+            const container = document.getElementById('quiz-container');
+            container.innerHTML = quiz.questions.map((q, i) => `
+                <div class="question-block mb-4">
+                    <p style="font-weight: 600; margin-bottom: 0.5rem; color: var(--text-main);">${i + 1}. ${q.question}</p>
+                    <div class="options" style="display: grid; gap: 0.5rem;">
+                        ${q.options.map(opt => `
+                            <label style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem; background: var(--bg-dark); border-radius: 0.5rem; cursor: pointer;">
+                                <input type="radio" name="q${i}" value="${opt}">
+                                ${opt}
+                            </label>
+                        `).join('')}
+                    </div>
+                </div>
+            `).join('');
+            document.getElementById('submit-quiz').classList.remove('hidden');
+        }
+
+        async function submitQuiz() {
+            let score = 0;
+            const answers = [];
+
+            currentQuizData.questions.forEach((q, i) => {
+                const selected = document.querySelector(`input[name="q${i}"]:checked`);
+                const val = selected ? selected.value : null;
+                if (val === q.correctAnswer) score++;
+
+                // Highlight results
+                const block = document.querySelectorAll('.question-block')[i];
+                if (val === q.correctAnswer) {
+                    block.style.borderLeft = '4px solid var(--success)';
+                } else {
+                    block.style.borderLeft = '4px solid var(--danger)';
+                    // Show correct answer? Maybe later.
+                }
+            });
+
+            const resultDiv = document.getElementById('quiz-result');
+            resultDiv.textContent = `You scored ${score} / ${currentQuizData.questions.length}`;
+            resultDiv.classList.remove('hidden');
+            resultDiv.style.color = score > (currentQuizData.questions.length / 2) ? 'var(--success)' : 'var(--danger)';
+
+            // Save progress
+            await fetch('/api/progress', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    quizId: currentQuizData._id,
+                    score,
+                    totalQuestions: currentQuizData.questions.length
+                })
+            });
+        }
+
+        function switchView(view) {
+            const notesView = document.getElementById('view-notes');
+            const quizView = document.getElementById('view-quiz');
+            const btnNotes = document.getElementById('btn-notes');
+            const btnQuiz = document.getElementById('btn-quiz');
+
+            if (view === 'notes') {
+                notesView.classList.remove('hidden');
+                quizView.classList.add('hidden');
+                btnNotes.classList.add('btn-primary');
+                btnNotes.classList.remove('btn-outline');
+                btnQuiz.classList.remove('btn-primary');
+                btnQuiz.classList.add('btn-outline');
+            } else {
+                notesView.classList.add('hidden');
+                quizView.classList.remove('hidden');
+                btnQuiz.classList.add('btn-primary');
+                btnQuiz.classList.remove('btn-outline');
+                btnNotes.classList.remove('btn-primary');
+                btnNotes.classList.add('btn-outline');
+            }
+        }
+
+        // Initialize
+        checkAuth().then(() => {
+            loadContent();
+            switchView('notes'); // Default view
+        });
+    </script>
+</body>
+
+</html>

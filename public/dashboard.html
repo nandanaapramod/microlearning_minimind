@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - MiniMind</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <header>
+        <div class="container">
+            <nav>
+                <a href="/dashboard.html" class="logo"> MiniMind</a>
+                <div class="nav-links">
+                    <span id="user-display" style="color: var(--text-muted); margin-right: 1rem;">Student</span>
+                    <a href="#" onclick="logout()">Logout</a>
+                </div>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container" style="padding-top: 2rem;">
+        <h2 class="mb-4">Your Library</h2>
+
+        <div
+            style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
+            <!-- Upload Section -->
+            <div class="upload-area" id="upload-zone"
+                style="border: 2px dashed var(--border); border-radius: 1rem; padding: 2rem; text-align: center; cursor: pointer; transition: all 0.2s; background-color: var(--bg-card); display: flex; flex-direction: column; justify-content: center;">
+                <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">📄</div>
+                <h3 style="font-size: 1.25rem;">Upload Document</h3>
+                <p style="color: var(--text-muted); font-size: 0.875rem;">Drag & drop PDF/Text</p>
+                <input type="file" id="file-input" accept=".pdf,.txt" style="display: none;"
+                    onchange="handleFileSelect(event)">
+            </div>
+
+            <!-- Stats Section -->
+            <div class="stats-card"
+                style="background-color: var(--bg-card); padding: 2rem; border-radius: 1rem; border: 1px solid var(--border);">
+                <h3 style="font-size: 1.25rem; margin-bottom: 1rem;">Your Progress</h3>
+                <div style="display: flex; gap: 2rem;">
+                    <div>
+                        <div style="font-size: 2rem; font-weight: 700; color: var(--primary);" id="stat-quizzes">0</div>
+                        <div style="color: var(--text-muted); font-size: 0.875rem;">Quizzes Taken</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 2rem; font-weight: 700; color: var(--success);" id="stat-avg">0%</div>
+                        <div style="color: var(--text-muted); font-size: 0.875rem;">Avg Score</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="upload-status" class="hidden" style="margin-top: 1rem; text-align: center; color: var(--text-muted);">
+            <div class="loader"></div> Processing your document... please wait.
+        </div>
+
+        <!-- Notes Grid -->
+        <div id="notes-grid" class="mt-4"
+            style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1.5rem;">
+            <!-- Note cards will be injected here -->
+        </div>
+    </main>
+
+    <script src="app.js"></script>
+    <script>
+        // Dashboard specific logic
+        const uploadZone = document.getElementById('upload-zone');
+        const fileInput = document.getElementById('file-input');
+
+        uploadZone.addEventListener('click', () => fileInput.click());
+        uploadZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadZone.style.borderColor = 'var(--primary)';
+        });
+        uploadZone.addEventListener('dragleave', () => {
+            uploadZone.style.borderColor = 'var(--border)';
+        });
+        uploadZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadZone.style.borderColor = 'var(--border)';
+            if (e.dataTransfer.files.length) {
+                handleFileUpload(e.dataTransfer.files[0]);
+            }
+        });
+
+        function handleFileSelect(e) {
+            if (e.target.files.length) {
+                handleFileUpload(e.target.files[0]);
+            }
+        }
+
+        async function handleFileUpload(file) {
+            const formData = new FormData();
+            formData.append('document', file);
+
+            document.getElementById('upload-status').classList.remove('hidden');
+
+            try {
+                const res = await fetch('/api/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    alert('Document processed successfully!');
+                    window.location.reload(); // Refresh to show new note
+                } else {
+                    const err = await res.json();
+                    alert('Upload failed: ' + err.error);
+                }
+            } catch (error) {
+                console.error(error);
+                alert('Error uploading file');
+            } finally {
+                document.getElementById('upload-status').classList.add('hidden');
+            }
+        }
+
+        async function loadNotes() {
+            try {
+                const res = await fetch('/api/notes');
+                const notes = await res.json();
+                const grid = document.getElementById('notes-grid');
+                grid.innerHTML = notes.map(note => `
+                    <a href="/viewer.html?id=${note._id}" class="note-card" style="background: var(--bg-card); padding: 1.5rem; border-radius: 1rem; border: 1px solid var(--border); display: block; text-decoration: none; color: inherit; transition: transform 0.2s;">
+                        <h3 style="margin-bottom: 0.5rem; color: var(--text-main);">${note.title}</h3>
+                        <p style="color: var(--text-muted); font-size: 0.875rem;">Created ${new Date(note.createdAt).toLocaleDateString()}</p>
+                    </a>
+                `).join('');
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        async function logout() {
+            await fetch('/api/auth/logout', { method: 'POST' });
+            window.location.href = '/index.html';
+        }
+
+        async function loadStats() {
+            try {
+                const res = await fetch('/api/progress');
+                const progress = await res.json();
+
+                const totalQuizzes = progress.length;
+                let totalScore = 0;
+                let maxScore = 0;
+
+                progress.forEach(p => {
+                    totalScore += p.score;
+                    maxScore += p.totalQuestions;
+                });
+
+                const avg = maxScore > 0 ? Math.round((totalScore / maxScore) * 100) : 0;
+
+                document.getElementById('stat-quizzes').textContent = totalQuizzes;
+                document.getElementById('stat-avg').textContent = avg + '%';
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        // Initialize
+        checkAuth().then(() => {
+            loadNotes();
+            loadStats();
+        });
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - MicroLearn</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <header>
+        <div class="container">
+            <nav>
+                <a href="/" class="logo">⚡ MiniMind</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container" style="flex: 1; display: flex; align-items: center; justify-content: center;">
+
+        <!-- Login Form -->
+        <div id="login-form" class="auth-card">
+            <h2 class="text-center mb-4">Welcome Back</h2>
+            <form onsubmit="handleLogin(event)">
+                <div class="form-group">
+                    <label for="login-email">Email</label>
+                    <input type="email" id="login-email" required placeholder="student@ktu.edu.in">
+                </div>
+                <div class="form-group">
+                    <label for="login-password">Password</label>
+                    <input type="password" id="login-password" required placeholder="••••••••">
+                </div>
+                <button type="submit" class="btn btn-primary" style="width: 100%;">Sign In</button>
+            </form>
+            <p class="text-center mt-4" style="color: var(--text-muted);">
+                New here? <a href="#" onclick="toggleAuth('signup')">Create an account</a>
+            </p>
+        </div>
+
+        <!-- Signup Form (Hidden by default) -->
+        <div id="signup-form" class="auth-card hidden">
+            <h2 class="text-center mb-4">Create Account</h2>
+            <form onsubmit="handleSignup(event)">
+                <div class="form-group">
+                    <label for="signup-username">Username</label>
+                    <input type="text" id="signup-username" required placeholder="johndoe">
+                </div>
+                <div class="form-group">
+                    <label for="signup-email">Email</label>
+                    <input type="email" id="signup-email" required placeholder="student@ktu.edu.in">
+                </div>
+                <div class="form-group">
+                    <label for="signup-password">Password</label>
+                    <input type="password" id="signup-password" required placeholder="••••••••">
+                </div>
+                <button type="submit" class="btn btn-primary" style="width: 100%;">Sign Up</button>
+            </form>
+            <p class="text-center mt-4" style="color: var(--text-muted);">
+                Already have an account? <a href="#" onclick="toggleAuth('login')">Sign in</a>
+            </p>
+        </div>
+
+    </main>
+
+    <script src="app.js"></script>
+</body>
+
+</html>

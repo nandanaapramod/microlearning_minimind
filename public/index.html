@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MiniMind -Your Learning Tool</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <header>
+        <div class="container">
+            <nav>
+                <a href="/" class="logo">⚡ MiniMind 
+                </a>
+                <div class="nav-links">
+                    <a href="login.html">Login</a>
+                    <a href="login.html" class="btn btn-primary" style="margin-left: 1rem; padding: 0.5rem 1rem;">Sign
+                        Up</a>
+                </div>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        <section class="hero">
+            <h1>Learn Anytime, Anywhere</h1>
+            <p>Upload your PDFs or lecture notes. We'll generate concise summaries and interactive quizzes instantly.
+                Optimized for KTU CSE students.</p>
+            <div style="display: flex; gap: 1rem; justify-content: center;">
+                <a href="login.html" class="btn btn-primary">Get Started</a>
+                <a href="#features" class="btn btn-outline">Learn More</a>
+            </div>
+        </section>
+
+        <!-- Features Section Placeholder -->
+        <section id="features" style="padding: 4rem 0; text-align: center; border-top: 1px solid var(--border);">
+            <h2 style="margin-bottom: 2rem; font-size: 2rem;">Why MiniMind ?</h2>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 2rem;">
+                <div class="feature-card">
+                    <div style="font-size: 2rem; margin-bottom: 1rem;">📝</div>
+                    <h3>Smart Notes</h3>
+                    <p style="color: var(--text-muted);">Condense 100 pages into key points instantly.</p>
+                </div>
+                <div class="feature-card">
+                    <div style="font-size: 2rem; margin-bottom: 1rem;">🧠</div>
+                    <h3>AI Quizzes</h3>
+                    <p style="color: var(--text-muted);">Test your knowledge with auto-generated quizzes.</p>
+                </div>
+                <div class="feature-card">
+                    <div style="font-size: 2rem; margin-bottom: 1rem;">📈</div>
+                    <h3>Track Progress</h3>
+                    <p style="color: var(--text-muted);">Visual analytics to keep you on top of your semester.</p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer style="text-align: center; padding: 2rem; border-top: 1px solid var(--border); margin-top: auto;">
+        <p style="color: var(--text-muted);">&copy; 2026 MiniMind. Built for you.</p>
+    </footer>
+
+    <script src="app.js"></script>
+</body>
+
+</html>
