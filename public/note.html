@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>View Note - MiniMind</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Markdown Parser -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+
+<body>
+    <header>
+        <div class="container">
+            <nav>
+                <a href="/dashboard.html" class="logo">⚡ MiniMind</a>
+                <div class="nav-links">
+                    <a href="/dashboard.html" class="btn btn-outline">Back to Dashboard</a>
+                </div>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        <div class="glass-card" style="padding: 3rem; margin-top: 2rem; position: relative;">
+            <div
+                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; border-bottom: 1px solid var(--border); padding-bottom: 1rem;">
+                <h1 id="note-title" style="font-size: 2rem;">Loading...</h1>
+                <div style="display: flex; gap: 1rem;">
+                    <button id="pyq-btn" class="btn btn-outline">📜 Get PYQs</button>
+                    <a id="quiz-link" href="#" class="btn btn-primary">Take Quiz</a>
+                </div>
+            </div>
+
+            <div id="note-content" class="markdown-body" style="line-height: 1.8; color: var(--text-main);">
+                <!-- Markdown content here -->
+            </div>
+        </div>
+
+        <!-- Chatbot Floating Button -->
+        <button id="chat-toggle"
+            style="position: fixed; bottom: 2rem; right: 2rem; width: 60px; height: 60px; border-radius: 30px; background: var(--primary); color: white; border: none; box-shadow: 0 10px 25px rgba(99, 102, 241, 0.5); cursor: pointer; z-index: 1000; font-size: 1.5rem;">
+            💬
+        </button>
+
+        <!-- Chatbot Window -->
+        <div id="chat-window" class="glass-card"
+            style="display: none; position: fixed; bottom: 6rem; right: 2rem; width: 350px; height: 500px; z-index: 1000; display: flex; flex-direction: column; overflow: hidden;">
+            <div
+                style="background: rgba(15, 23, 42, 0.9); padding: 1rem; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
+                <h3 style="margin: 0; font-size: 1rem;">AI Tutor</h3>
+                <button id="close-chat"
+                    style="background: none; border: none; color: var(--text-muted); cursor: pointer;">✕</button>
+            </div>
+            <div id="chat-messages"
+                style="flex: 1; padding: 1rem; overflow-y: auto; display: flex; flex-direction: column; gap: 0.8rem;">
+                <div
+                    style="background: rgba(99, 102, 241, 0.1); padding: 0.8rem; border-radius: 0.5rem; align-self: flex-start; max-width: 80%;">
+                    Hello! I've studied these notes. Ask me anything!
+                </div>
+            </div>
+            <form id="chat-form"
+                style="padding: 1rem; background: rgba(15, 23, 42, 0.9); border-top: 1px solid var(--border); display: flex; gap: 0.5rem;">
+                <input type="text" id="chat-input" placeholder="Ask a doubt..." required
+                    style="flex: 1; padding: 0.5rem; border-radius: 0.5rem; border: 1px solid var(--border); background: rgba(0,0,0,0.2); color: white;">
+                <button type="submit" class="btn btn-primary" style="padding: 0.5rem 1rem;">Send</button>
+            </form>
+        </div>
+
+        <!-- PYQ Modal -->
+        <div id="pyq-modal" class="glass-card"
+            style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1000; width: 90%; max-width: 600px; padding: 2rem; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); max-height: 80vh; overflow-y: auto;">
+            <h2 id="pyq-title" class="mb-4">Previous Year Questions</h2>
+            <div id="pyq-content" class="markdown-body">
+                Loading...
+            </div>
+            <button id="close-pyq" class="btn btn-outline mt-4" style="width: 100%;">Close</button>
+        </div>
+        <div id="modal-overlay"
+            style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 999; backdrop-filter: blur(4px);">
+        </div>
+
+    </main>
+
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const noteId = urlParams.get('id');
+        let chatHistory = [];
+
+        // Elements
+        const noteTitleEl = document.getElementById('note-title');
+        const noteContentEl = document.getElementById('note-content');
+        const quizLinkEl = document.getElementById('quiz-link');
+        const pyqBtn = document.getElementById('pyq-btn');
+        const pyqModal = document.getElementById('pyq-modal');
+        const overlay = document.getElementById('modal-overlay');
+        const closePyq = document.getElementById('close-pyq');
+        const pyqContent = document.getElementById('pyq-content');
+        const pyqTitle = document.getElementById('pyq-title');
+
+        // Chat Elements
+        const chatToggle = document.getElementById('chat-toggle');
+        const chatWindow = document.getElementById('chat-window');
+        const closeChat = document.getElementById('close-chat');
+        const chatForm = document.getElementById('chat-form');
+        const chatInput = document.getElementById('chat-input');
+        const chatMessages = document.getElementById('chat-messages');
+
+        // Load Note Function
+        async function loadNote() {
+            if (!noteId) {
+                window.location.href = '/dashboard.html';
+                return;
+            }
+
+            try {
+                // Fetch note
+                const res = await fetch(`/api/notes/${noteId}`);
+                if (!res.ok) throw new Error(`Note not found (Status: ${res.status})`);
+
+                const note = await res.json();
+
+                // Update UI
+                document.title = `${note.title} - MiniMind`;
+                if (noteTitleEl) noteTitleEl.textContent = note.title;
+
+                // Parse markdown safely
+                if (noteContentEl) {
+                    if (typeof marked !== 'undefined') {
+                        noteContentEl.innerHTML = marked.parse(note.content);
+                    } else {
+                        noteContentEl.textContent = note.content;
+                    }
+                }
+
+                // Update Quiz Link
+                if (quizLinkEl) quizLinkEl.href = `/quiz.html?id=${note._id}`;
+
+            } catch (err) {
+                console.error('Load Error:', err);
+                if (noteContentEl) {
+                    noteContentEl.innerHTML = `<div class="text-danger">
+                        <h3>Error Loading Note</h3>
+                        <p>${err.message}</p>
+                        <a href="/dashboard.html" class="btn btn-outline">Return to Dashboard</a>
+                    </div>`;
+                }
+                if (noteTitleEl) noteTitleEl.textContent = 'Error';
+            }
+        }
+
+        // --- Event Listeners ---
+
+        // 1. PYQ Modal logic
+        if (pyqBtn && pyqModal) {
+            pyqBtn.addEventListener('click', async () => {
+                pyqTitle.textContent = 'Previous Year Questions';
+                pyqContent.innerHTML = '<p class="text-muted">Searching for papers...</p>';
+                pyqModal.style.display = 'block';
+                overlay.style.display = 'block';
+
+                try {
+                    const res = await fetch('/api/pyq/external', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ noteId })
+                    });
+
+                    const data = await res.json();
+
+                    if (data.links && data.links.length > 0) {
+                        let html = `<p>Found from: <a href="${data.pageLink}" target="_blank">${data.pageTitle}</a></p>`;
+                        html += '<ul style="list-style: none; padding: 0;">';
+                        data.links.forEach((link, index) => {
+                            const linkText = link.text || `Paper ${index + 1}`;
+                            html += `
+                                <li style="margin-bottom: 0.5rem;">
+                                    <a href="${link.link}" target="_blank" class="btn btn-outline" style="display: block; text-align: left;">
+                                        📄 ${linkText}
+                                    </a>
+                                </li>
+                            `;
+                        });
+                        html += '</ul>';
+                        pyqContent.innerHTML = html;
+                    } else {
+                        pyqContent.innerHTML = `<p class="text-muted">${data.message || 'No papers found.'}</p>`;
+                    }
+                } catch (err) {
+                    pyqContent.innerHTML = `<p class="text-danger">Error: ${err.message}</p>`;
+                }
+            });
+
+            const closePyqModal = () => {
+                pyqModal.style.display = 'none';
+                overlay.style.display = 'none';
+            };
+
+            closePyq.addEventListener('click', closePyqModal);
+            overlay.addEventListener('click', closePyqModal);
+        }
+
+        // 2. Chatbot Logic
+        if (chatToggle && chatWindow) {
+            chatToggle.addEventListener('click', () => {
+                chatWindow.style.display = 'flex';
+                chatToggle.style.display = 'none';
+            });
+
+            closeChat.addEventListener('click', () => {
+                chatWindow.style.display = 'none';
+                chatToggle.style.display = 'block';
+            });
+
+            chatForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const message = chatInput.value.trim();
+                if (!message) return;
+
+                addMessage(message, 'user');
+                chatInput.value = '';
+                const loadingDiv = addMessage('Thinking...', 'ai');
+
+                try {
+                    const res = await fetch('/api/chat', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ noteId, message, history: chatHistory })
+                    });
+                    const data = await res.json();
+
+                    if (chatMessages.contains(loadingDiv)) {
+                        chatMessages.removeChild(loadingDiv);
+                    }
+
+                    if (data.reply) {
+                        addMessage(data.reply, 'ai');
+                        chatHistory.push({ role: 'user', parts: [{ text: message }] });
+                        chatHistory.push({ role: 'model', parts: [{ text: data.reply }] });
+                    } else {
+                        addMessage('Error: ' + (data.error || 'Unknown error'), 'ai');
+                    }
+                } catch (err) {
+                    if (chatMessages.contains(loadingDiv)) chatMessages.removeChild(loadingDiv);
+                    addMessage('Failed to connect.', 'ai');
+                }
+            });
+        }
+
+        function addMessage(text, sender) {
+            const div = document.createElement('div');
+            div.style.padding = '0.8rem';
+            div.style.borderRadius = '0.5rem';
+            div.style.maxWidth = '80%';
+            div.style.wordWrap = 'break-word';
+
+            if (sender === 'user') {
+                div.style.backgroundColor = 'var(--primary)';
+                div.style.color = 'white';
+                div.style.alignSelf = 'flex-end';
+            } else {
+                div.style.backgroundColor = 'rgba(99, 102, 241, 0.1)';
+                div.style.color = 'var(--text-main)';
+                div.style.alignSelf = 'flex-start';
+            }
+
+            // Basic bold markdown
+            div.innerHTML = text.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
+            chatMessages.appendChild(div);
+
+            // Scroll to bottom
+            requestAnimationFrame(() => {
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            });
+            return div;
+        }
+
+        // Initialize
+        if (typeof marked === 'undefined') {
+            console.warn('Marked library not loaded yet. Waiting...');
+            window.addEventListener('load', loadNote);
+        } else {
+            loadNote();
+        }
+    </script>
+</body>
+
+</html>

@@ -13,164 +13,92 @@
     <header>
         <div class="container">
             <nav>
-                <a href="/dashboard.html" class="logo"> MiniMind</a>
+                <a href="/dashboard.html" class="logo">⚡ MiniMind</a>
                 <div class="nav-links">
-                    <span id="user-display" style="color: var(--text-muted); margin-right: 1rem;">Student</span>
-                    <a href="#" onclick="logout()">Logout</a>
+                    <span id="user-display" style="color: var(--text-main); font-weight: 600;"></span>
+                    <button id="logout-btn" class="btn btn-outline"
+                        style="padding: 0.5rem 1rem; font-size: 0.9rem;">Logout</button>
                 </div>
             </nav>
         </div>
     </header>
 
-    <main class="container" style="padding-top: 2rem;">
-        <h2 class="mb-4">Your Library</h2>
-
-        <div
-            style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
-            <!-- Upload Section -->
-            <div class="upload-area" id="upload-zone"
-                style="border: 2px dashed var(--border); border-radius: 1rem; padding: 2rem; text-align: center; cursor: pointer; transition: all 0.2s; background-color: var(--bg-card); display: flex; flex-direction: column; justify-content: center;">
-                <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">📄</div>
-                <h3 style="font-size: 1.25rem;">Upload Document</h3>
-                <p style="color: var(--text-muted); font-size: 0.875rem;">Drag & drop PDF/Text</p>
-                <input type="file" id="file-input" accept=".pdf,.txt" style="display: none;"
-                    onchange="handleFileSelect(event)">
+    <main class="container">
+        <!-- Welcome & Upload Section -->
+        <section class="mt-4 mb-4">
+            <div class="glass-card"
+                style="padding: 2rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+                <div>
+                    <h1 style="font-size: 2rem; margin-bottom: 0.5rem;">Your Learning Space</h1>
+                    <p class="text-muted">Manage your notes and track your progress.</p>
+                </div>
+                <button id="upload-btn" class="btn btn-primary">
+                    + Upload New Material
+                </button>
             </div>
+        </section>
 
-            <!-- Stats Section -->
-            <div class="stats-card"
-                style="background-color: var(--bg-card); padding: 2rem; border-radius: 1rem; border: 1px solid var(--border);">
-                <h3 style="font-size: 1.25rem; margin-bottom: 1rem;">Your Progress</h3>
-                <div style="display: flex; gap: 2rem;">
-                    <div>
-                        <div style="font-size: 2rem; font-weight: 700; color: var(--primary);" id="stat-quizzes">0</div>
-                        <div style="color: var(--text-muted); font-size: 0.875rem;">Quizzes Taken</div>
+        <!-- Upload Modal (Hidden by default) -->
+        <div id="upload-modal" class="glass-card"
+            style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1000; width: 90%; max-width: 500px; padding: 2rem; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);">
+            <h2 class="mb-4">Upload Document</h2>
+            <form id="upload-form">
+                <div class="form-group">
+                    <label for="file">Select PDF or Text File</label>
+                    <input type="file" id="file" name="document" accept=".pdf,.txt" required>
+                    <p class="text-muted text-sm mt-4">Max size: 10MB. This may take a minute.</p>
+                </div>
+                <div style="display: flex; gap: 1rem; justify-content: flex-end;">
+                    <button type="button" id="cancel-upload" class="btn btn-outline">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Generate Notes & Quiz</button>
+                </div>
+            </form>
+            <div id="upload-loading" style="display: none; text-align: center; margin-top: 1rem;">
+                <p class="text-muted">✨ Finding the key concepts... please wait.</p>
+            </div>
+        </div>
+        <div id="modal-overlay"
+            style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 999; backdrop-filter: blur(4px);">
+        </div>
+
+        <!-- Progress Board -->
+        <section class="mb-4">
+            <h2 class="mb-4" style="border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">Your Progress</h2>
+            <div
+                style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
+                <!-- Stat Cards -->
+                <div class="glass-card" style="padding: 1.5rem; text-align: center;">
+                    <h3 style="font-size: 1rem; color: var(--text-muted); margin-bottom: 0.5rem;">Total Quizzes</h3>
+                    <div id="stat-total-quizzes" style="font-size: 2.5rem; font-weight: 800; color: var(--primary);">0
                     </div>
-                    <div>
-                        <div style="font-size: 2rem; font-weight: 700; color: var(--success);" id="stat-avg">0%</div>
-                        <div style="color: var(--text-muted); font-size: 0.875rem;">Avg Score</div>
+                </div>
+                <div class="glass-card" style="padding: 1.5rem; text-align: center;">
+                    <h3 style="font-size: 1rem; color: var(--text-muted); margin-bottom: 0.5rem;">Average Score</h3>
+                    <div id="stat-avg-score" style="font-size: 2.5rem; font-weight: 800; color: var(--secondary);">0%
                     </div>
                 </div>
             </div>
-        </div>
 
-        <div id="upload-status" class="hidden" style="margin-top: 1rem; text-align: center; color: var(--text-muted);">
-            <div class="loader"></div> Processing your document... please wait.
-        </div>
+            <!-- Subject-wise Progress -->
+            <div class="glass-card" style="padding: 1.5rem;">
+                <h3 style="margin-bottom: 1rem;">Subject-wise Performance</h3>
+                <div id="subject-progress-container">
+                    <p class="text-muted">Take quizzes to see your breakdown.</p>
+                </div>
+            </div>
+        </section>
 
         <!-- Notes Grid -->
-        <div id="notes-grid" class="mt-4"
-            style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1.5rem;">
-            <!-- Note cards will be injected here -->
-        </div>
+        <section>
+            <h2 class="mb-4" style="border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">Recent Notes</h2>
+            <div id="notes-grid" class="features-grid">
+                <!-- Notes will be injected here -->
+                <p class="text-muted">Loading your notes...</p>
+            </div>
+        </section>
     </main>
 
     <script src="app.js"></script>
-    <script>
-        // Dashboard specific logic
-        const uploadZone = document.getElementById('upload-zone');
-        const fileInput = document.getElementById('file-input');
-
-        uploadZone.addEventListener('click', () => fileInput.click());
-        uploadZone.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            uploadZone.style.borderColor = 'var(--primary)';
-        });
-        uploadZone.addEventListener('dragleave', () => {
-            uploadZone.style.borderColor = 'var(--border)';
-        });
-        uploadZone.addEventListener('drop', (e) => {
-            e.preventDefault();
-            uploadZone.style.borderColor = 'var(--border)';
-            if (e.dataTransfer.files.length) {
-                handleFileUpload(e.dataTransfer.files[0]);
-            }
-        });
-
-        function handleFileSelect(e) {
-            if (e.target.files.length) {
-                handleFileUpload(e.target.files[0]);
-            }
-        }
-
-        async function handleFileUpload(file) {
-            const formData = new FormData();
-            formData.append('document', file);
-
-            document.getElementById('upload-status').classList.remove('hidden');
-
-            try {
-                const res = await fetch('/api/upload', {
-                    method: 'POST',
-                    body: formData
-                });
-
-                if (res.ok) {
-                    const data = await res.json();
-                    alert('Document processed successfully!');
-                    window.location.reload(); // Refresh to show new note
-                } else {
-                    const err = await res.json();
-                    alert('Upload failed: ' + err.error);
-                }
-            } catch (error) {
-                console.error(error);
-                alert('Error uploading file');
-            } finally {
-                document.getElementById('upload-status').classList.add('hidden');
-            }
-        }
-
-        async function loadNotes() {
-            try {
-                const res = await fetch('/api/notes');
-                const notes = await res.json();
-                const grid = document.getElementById('notes-grid');
-                grid.innerHTML = notes.map(note => `
-                    <a href="/viewer.html?id=${note._id}" class="note-card" style="background: var(--bg-card); padding: 1.5rem; border-radius: 1rem; border: 1px solid var(--border); display: block; text-decoration: none; color: inherit; transition: transform 0.2s;">
-                        <h3 style="margin-bottom: 0.5rem; color: var(--text-main);">${note.title}</h3>
-                        <p style="color: var(--text-muted); font-size: 0.875rem;">Created ${new Date(note.createdAt).toLocaleDateString()}</p>
-                    </a>
-                `).join('');
-            } catch (err) {
-                console.error(err);
-            }
-        }
-
-        async function logout() {
-            await fetch('/api/auth/logout', { method: 'POST' });
-            window.location.href = '/index.html';
-        }
-
-        async function loadStats() {
-            try {
-                const res = await fetch('/api/progress');
-                const progress = await res.json();
-
-                const totalQuizzes = progress.length;
-                let totalScore = 0;
-                let maxScore = 0;
-
-                progress.forEach(p => {
-                    totalScore += p.score;
-                    maxScore += p.totalQuestions;
-                });
-
-                const avg = maxScore > 0 ? Math.round((totalScore / maxScore) * 100) : 0;
-
-                document.getElementById('stat-quizzes').textContent = totalQuizzes;
-                document.getElementById('stat-avg').textContent = avg + '%';
-            } catch (err) {
-                console.error(err);
-            }
-        }
-
-        // Initialize
-        checkAuth().then(() => {
-            loadNotes();
-            loadStats();
-        });
-    </script>
 </body>
 
 </html>

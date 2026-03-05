@@ -121,6 +121,8 @@ router.post('/progress', async (req, res) => {
         const progress = new Progress({
             userId: req.session.userId,
             quizId,
+
+
             score,
             totalQuestions
         });
@@ -134,10 +136,116 @@ router.post('/progress', async (req, res) => {
 // Get Progress Stats
 router.get('/progress', async (req, res) => {
     try {
-        const progress = await Progress.find({ userId: req.session.userId });
+        const progress = await Progress.find({ userId: req.session.userId })
+            .populate({
+                path: 'quizId',
+                populate: {
+                    path: 'noteId',
+                    select: 'title'
+                }
+            });
         res.json(progress);
     } catch (err) {
+        console.error(err);
         res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// Chatbot
+router.post('/chat', async (req, res) => {
+    try {
+        const { noteId, message, history } = req.body;
+        const note = await Note.findById(noteId);
+
+        if (!note) return res.status(404).json({ error: 'Note not found' });
+
+        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+        // Construct prompt with context
+        const chat = model.startChat({
+            history: history || [],
+            generationConfig: {
+                maxOutputTokens: 500,
+            },
+        });
+
+        const prompt = `Context: You are a helpful tutor assisting a student with their notes. 
+        Here are the notes: ${note.content.substring(0, 20000)}
+        
+        Student Question: ${message}
+        
+        Answer based on the notes provided. Be concise and encouraging.`;
+
+        const result = await chat.sendMessage(prompt);
+        const response = await result.response;
+        const text = response.text();
+
+        res.json({ reply: text });
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Chat error: ' + err.message });
+    }
+});
+
+const { getKTUOnlinePYQs } = require('../utils/scraper');
+
+// Generate PYQ (Previous Year Questions)
+router.post('/pyq', async (req, res) => {
+    try {
+        const { noteId } = req.body;
+        const note = await Note.findById(noteId);
+
+        if (!note) return res.status(404).json({ error: 'Note not found' });
+
+        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+        const prompt = `Based on the following notes, generate 5 potential "Previous University Exam Style" questions. 
+        These should be descriptive questions (marks 5-10 range), not MCQs.
+        Format the output as a Markdown list.
+        
+        Notes: ${note.content.substring(0, 20000)}`;
+
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        const text = response.text();
+
+        res.json({ pyq: text });
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'PYQ generation error: ' + err.message });
+    }
+});
+
+// External PYQ from ktuonline.com
+router.post('/pyq/external', async (req, res) => {
+    try {
+        const { noteId } = req.body;
+        const note = await Note.findById(noteId);
+
+        if (!note) return res.status(404).json({ error: 'Note not found' });
+
+        // Clean title for search
+        const cleanTitle = note.title.replace(/\.[^/.]+$/, "").replace(/_/g, " ").replace(/-/g, " ");
+        console.log('Searching External PYQ for:', cleanTitle);
+
+        const links = await getKTUOnlinePYQs(cleanTitle);
+
+        if (links.length === 0) {
+            return res.json({ message: 'No external PYQs found for this subject.' });
+        }
+
+        res.json({
+            source: 'ktuonline.com',
+            pageTitle: 'KTU Online Search Results',
+            pageLink: 'https://www.ktuonline.com/btech-cs-question-papers.html', // Generic link as we don't have a specific page from search
+            links: links
+        });
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'External Search Error: ' + err.message });
     }
 });
 

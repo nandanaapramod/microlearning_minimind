@@ -4,7 +4,7 @@ const User = require('./models/User');
 
 const router = express.Router();
 
-// Middleware to check if user is authenticated
+
 function isAuthenticated(req, res, next) {
     if (req.session && req.session.userId) {
         return next();

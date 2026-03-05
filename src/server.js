@@ -44,8 +44,7 @@ app.get('/api/dashboard', isAuthenticated, (req, res) => {
     res.json({ message: 'Welcome to your dashboard' });
 });
 
-// Serve frontend for all other routes (SPA fallback if needed, but we have static files)
-// For now, let's just default to index.html for root
+
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, '../public/index.html'));
 });

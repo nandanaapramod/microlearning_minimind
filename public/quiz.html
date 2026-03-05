@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Take Quiz - MiniMind</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <header>
+        <div class="container">
+            <nav>
+                <a href="/dashboard.html" class="logo">⚡ MiniMind</a>
+                <div class="nav-links">
+                    <a href="/dashboard.html" class="btn btn-outline">Exit Quiz</a>
+                </div>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        <div id="quiz-container" class="glass-card"
+            style="padding: 3rem; margin-top: 2rem; max-width: 800px; margin-left: auto; margin-right: auto;">
+            <div style="margin-bottom: 2rem; text-align: center;">
+                <h1 id="quiz-title" style="margin-bottom: 0.5rem;">Loading Quiz...</h1>
+                <p id="question-tracker" class="text-muted">Question 1 of 5</p>
+            </div>
+
+            <div id="question-box">
+                <h3 id="question-text" style="font-size: 1.5rem; margin-bottom: 2rem;"></h3>
+                <div id="options-container" style="display: grid; gap: 1rem;">
+                    <!-- Options injected here -->
+                </div>
+            </div>
+
+            <button id="next-btn" class="btn btn-primary mt-4" style="width: 100%; display: none;">Next
+                Question</button>
+        </div>
+
+        <!-- Results View (Hidden) -->
+        <div id="results-view" class="glass-card hidden"
+            style="padding: 3rem; margin-top: 2rem; text-align: center; max-width: 600px; margin-left: auto; margin-right: auto;">
+            <div style="font-size: 4rem; margin-bottom: 1rem;">🏆</div>
+            <h2 class="mb-4">Quiz Completed!</h2>
+            <p style="font-size: 1.5rem; margin-bottom: 2rem;">You scored <span id="final-score"
+                    style="color: var(--success); font-weight: bold;">0</span>/<span id="total-score">0</span></p>
+            <div style="display: flex; gap: 1rem; justify-content: center;">
+                <a href="/dashboard.html" class="btn btn-outline">Back to Dashboard</a>
+                <button onclick="location.reload()" class="btn btn-primary">Retake Quiz</button>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        // Note: The link from dashboard is ?id=NOTE_ID (which is note._id). 
+        // But the API /notes/:id/quiz expects NOTE_ID.
+        // Wait, the API endpoint is `router.get('/notes/:id/quiz', ...)` which finds quiz by `noteId: req.params.id`.
+        // So passing note._id is correct.
+        const noteId = urlParams.get('id');
+
+        let quizData = null;
+        let currentQuestionIndex = 0;
+        let score = 0;
+
+        async function loadQuiz() {
+            try {
+                const res = await fetch(`/api/notes/${noteId}/quiz`);
+                if (!res.ok) throw new Error('Quiz not found');
+
+                quizData = await res.json();
+
+                document.getElementById('quiz-title').textContent = quizData.title;
+                renderQuestion();
+            } catch (err) {
+                document.getElementById('quiz-container').innerHTML = `<p class="text-center text-muted">Error loading quiz: ${err.message}. <br> Try regenerating the note.</p>`;
+            }
+        }
+
+        function renderQuestion() {
+            const question = quizData.questions[currentQuestionIndex];
+            document.getElementById('question-tracker').textContent = `Question ${currentQuestionIndex + 1} of ${quizData.questions.length}`;
+            document.getElementById('question-text').textContent = question.question;
+
+            const optionsContainer = document.getElementById('options-container');
+            optionsContainer.innerHTML = '';
+
+            question.options.forEach(option => {
+                const btn = document.createElement('button');
+                btn.className = 'btn btn-outline';
+                btn.style.textAlign = 'left';
+                btn.textContent = option;
+                btn.onclick = () => selectOption(btn, option, question.correctAnswer);
+                optionsContainer.appendChild(btn);
+            });
+
+            document.getElementById('next-btn').style.display = 'none';
+        }
+
+        function selectOption(btn, selected, correct) {
+            const buttons = document.getElementById('options-container').children;
+            for (let b of buttons) {
+                b.disabled = true;
+                if (b.textContent === correct) {
+                    b.style.borderColor = 'var(--success)';
+                    b.style.backgroundColor = 'rgba(34, 197, 94, 0.1)';
+                } else if (b === btn && selected !== correct) {
+                    b.style.borderColor = 'var(--danger)';
+                    b.style.backgroundColor = 'rgba(239, 68, 68, 0.1)';
+                }
+            }
+
+            if (selected === correct) score++;
+
+            document.getElementById('next-btn').style.display = 'inline-block';
+        }
+
+        document.getElementById('next-btn').onclick = async () => {
+            currentQuestionIndex++;
+            if (currentQuestionIndex < quizData.questions.length) {
+                renderQuestion();
+            } else {
+                await saveProgress();
+                showResults();
+            }
+        };
+
+        async function saveProgress() {
+            try {
+                await fetch('/api/progress', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        quizId: quizData._id,
+                        score: score,
+                        totalQuestions: quizData.questions.length
+                    })
+                });
+            } catch (err) {
+                console.error('Failed to save progress', err);
+            }
+        }
+
+        function showResults() {
+            document.getElementById('quiz-container').classList.add('hidden');
+            document.getElementById('results-view').classList.remove('hidden');
+            document.getElementById('final-score').textContent = score;
+            document.getElementById('total-score').textContent = quizData.questions.length;
+        }
+
+        if (noteId) {
+            loadQuiz();
+        } else {
+            window.location.href = '/dashboard.html';
+        }
+    </script>
+</body>
+
+</html>
