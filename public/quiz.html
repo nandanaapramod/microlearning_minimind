@@ -41,8 +41,8 @@
         </div>
 
         <!-- Results View (Hidden) -->
-        <div id="results-view" class="glass-card hidden"
-            style="padding: 3rem; margin-top: 2rem; text-align: center; max-width: 600px; margin-left: auto; margin-right: auto;">
+        <div id="results-view" class="glass-card"
+            style="padding: 3rem; margin-top: 2rem; text-align: center; max-width: 600px; margin-left: auto; margin-right: auto; display: none;">
             <div style="font-size: 4rem; margin-bottom: 1rem;">🏆</div>
             <h2 class="mb-4">Quiz Completed!</h2>
             <p style="font-size: 1.5rem; margin-bottom: 2rem;">You scored <span id="final-score"
@@ -115,7 +115,13 @@
 
             if (selected === correct) score++;
 
-            document.getElementById('next-btn').style.display = 'inline-block';
+            const nextBtn = document.getElementById('next-btn');
+            if (currentQuestionIndex === quizData.questions.length - 1) {
+                nextBtn.textContent = 'Submit';
+            } else {
+                nextBtn.textContent = 'Next Question';
+            }
+            nextBtn.style.display = 'inline-block';
         }
 
         document.getElementById('next-btn').onclick = async () => {
@@ -145,7 +151,8 @@
         }
 
         function showResults() {
-            document.getElementById('quiz-container').classList.add('hidden');
+            document.getElementById('quiz-container').style.display = 'none';
+            document.getElementById('results-view').style.display = 'block';
             document.getElementById('results-view').classList.remove('hidden');
             document.getElementById('final-score').textContent = score;
             document.getElementById('total-score').textContent = quizData.questions.length;

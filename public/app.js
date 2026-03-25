@@ -157,7 +157,18 @@ async function loadNotes() {
 
     try {
         const res = await fetch(`${API_URL}/notes`);
-        const notes = await res.json();
+        let notes = await res.json();
+
+        // Prevent duplicate entries of the same note on the dashboard
+        const uniqueNotes = [];
+        const seenTitles = new Set();
+        for (const note of notes) {
+            if (!seenTitles.has(note.title)) {
+                seenTitles.add(note.title);
+                uniqueNotes.push(note);
+            }
+        }
+        notes = uniqueNotes;
 
         if (notes.length === 0) {
             notesGrid.innerHTML = `
@@ -172,7 +183,10 @@ async function loadNotes() {
         notesGrid.innerHTML = notes.map(note => `
             <div class="glass-card feature-card" style="display: flex; flex-direction: column; justify-content: space-between;">
                 <div>
-                    <div style="font-size: 2rem; margin-bottom: 1rem;">📄</div>
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                        <div style="font-size: 2rem; margin-bottom: 1rem;">📄</div>
+                        <button onclick="deleteNote('${note._id}')" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; filter: grayscale(100%); transition: filter 0.2s;" onmouseover="this.style.filter='grayscale(0%)'" onmouseout="this.style.filter='grayscale(100%)'" title="Delete Note">🗑️</button>
+                    </div>
                     <h3 style="margin-bottom: 0.5rem; font-size: 1.25rem;">${note.title}</h3>
                     <p class="text-muted text-sm">Created: ${new Date(note.createdAt).toLocaleDateString()}</p>
                 </div>
@@ -186,5 +200,29 @@ async function loadNotes() {
     } catch (err) {
         console.error('Failed to load notes', err);
         notesGrid.innerHTML = '<p class="text-muted">Failed to load notes.</p>';
+    }
+}
+
+// Delete Note
+async function deleteNote(noteId) {
+    if (!confirm('Are you sure you want to delete this note? Its quizzes and your progress will also be permanently deleted.')) {
+        return;
+    }
+
+    try {
+        const res = await fetch(`${API_URL}/notes/${noteId}`, {
+            method: 'DELETE'
+        });
+
+        if (res.ok) {
+            loadNotes();
+            loadProgressStats(); // Refreshes stats because quizzes might be gone
+        } else {
+            const data = await res.json();
+            alert(data.error || 'Failed to delete note');
+        }
+    } catch (err) {
+        console.error('Error deleting note', err);
+        alert('An error occurred while deleting the note.');
     }
 }

@@ -5,6 +5,7 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 const Note = require('../models/Note');
 const Quiz = require('../models/Quiz');
 const Progress = require('../models/Progress');
+const PyqPaper = require('../models/PyqPaper');
 const { isAuthenticated } = require('../auth');
 
 const router = express.Router();
@@ -14,6 +15,54 @@ const upload = multer({ storage: multer.memoryStorage() });
 // TODO: User needs to set GEMINI_API_KEY in .env
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || 'your_api_key');
 
+// --- Developer PYQ Feature Routes (Public/Admin) ---
+
+// Upload PYQ PDF
+router.post('/pyq/upload', upload.single('document'), async (req, res) => {
+    try {
+        if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+        const subject = req.body.subject;
+        if (!subject) return res.status(400).json({ error: 'Subject is required' });
+
+        let textCurent = '';
+        if (req.file.mimetype === 'application/pdf') {
+            const data = await pdf(req.file.buffer);
+            textCurent = data.text;
+        } else {
+            textCurent = req.file.buffer.toString('utf-8');
+        }
+
+        if (!textCurent || textCurent.length < 50) {
+            return res.status(400).json({ error: 'Could not extract enough text from file' });
+        }
+
+        const pyqPaper = new PyqPaper({
+            subject: subject.trim(),
+            filename: req.file.originalname,
+            originalText: textCurent
+        });
+        await pyqPaper.save();
+
+        res.json({ message: 'PYQ Uploaded Successfully', pyqId: pyqPaper._id });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Error processing document: ' + err.message });
+    }
+});
+
+// Get PYQ Papers list
+router.get('/pyq/papers', async (req, res) => {
+    try {
+        const papers = await PyqPaper.find()
+            .select('subject filename createdAt')
+            .sort({ createdAt: -1 });
+        res.json(papers);
+    } catch (err) {
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// --- Protected Routes ---
 router.use(isAuthenticated);
 
 // Upload and Process
@@ -37,6 +86,15 @@ router.post('/upload', upload.single('document'), async (req, res) => {
 
         // AI Generation
         const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+        // 0. Validate if the document is actually Notes/Study Material
+        const validationPrompt = `Analyze the following text. Is this text primarily instructional study material, academic notes, a lecture transcript, or a textbook excerpt? Answer strictly with "YES" or "NO".\n\nText:\n${textCurent.substring(0, 3000)}`;
+        const validationResult = await model.generateContent(validationPrompt);
+        const isNotesText = (await validationResult.response.text()).trim().toUpperCase();
+
+        if (!isNotesText.includes('YES')) {
+            return res.status(400).json({ error: 'The uploaded file does not appear to be study notes or academic material. Please upload valid lecture notes or textbook excerpts.' });
+        }
 
         // 1. Generate Notes
         const notePrompt = `Summarize the following text into concise, easy-to-study notes using Markdown formatting. Use headers, bullet points, and bold text for key concepts:\n\n${textCurent.substring(0, 30000)}`; // Limit char count
@@ -100,6 +158,26 @@ router.get('/notes/:id', async (req, res) => {
         res.json(note);
     } catch (err) {
         res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// Delete Single Note
+router.delete('/notes/:id', async (req, res) => {
+    try {
+        const note = await Note.findOneAndDelete({ _id: req.params.id, userId: req.session.userId });
+        if (!note) return res.status(404).json({ error: 'Note not found or unauthorized' });
+
+        // Optional: Clean up associated quizzes and progress
+        const quizzes = await Quiz.find({ noteId: note._id });
+        for (let q of quizzes) {
+            await Progress.deleteMany({ quizId: q._id });
+            await q.deleteOne();
+        }
+
+        res.json({ message: 'Note deleted successfully' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Server error during deletion' });
     }
 });
 
@@ -246,6 +324,77 @@ router.post('/pyq/external', async (req, res) => {
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: 'External Search Error: ' + err.message });
+    }
+});
+
+
+// Extract PYQ from stored PYQ Papers
+router.post('/pyq/extract', async (req, res) => {
+    try {
+        const { noteId } = req.body;
+        const note = await Note.findById(noteId);
+        if (!note) return res.status(404).json({ error: 'Note not found' });
+
+        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+        // 1. Identify Subject and Topic
+        const identifyPrompt = `Given the following note title and content, deduce the Subject and the specific Module/Topic. 
+Respond in strict JSON format: {"subject": "string", "topic": "string"}. 
+Note Title: ${note.title}
+Content: ${note.content.substring(0, 5000)}`;
+
+        const identifyResult = await model.generateContent(identifyPrompt);
+        let identifyText = await identifyResult.response.text();
+        identifyText = identifyText.replace(/```json/g, '').replace(/```/g, '').trim();
+        
+        let subject = "", topic = "";
+        try {
+            const parsed = JSON.parse(identifyText);
+            subject = parsed.subject;
+            topic = parsed.topic;
+        } catch (e) {
+            console.error("Failed to parse JSON for subject/topic:", identifyText);
+            return res.status(500).json({ error: "Failed to identify subject and topic." });
+        }
+
+        // 2. Fetch PYQ Papers (simple case insensitive regex on subject)
+        // If subject is "Compiler Design", we look for "compiler" or "design" in stored papers?
+        // Let's do a loose word match to be safe.
+        const searchTerms = subject.split(' ').filter(w => w.length > 3).join('|');
+        const pyqPapers = await PyqPaper.find({
+            subject: { $regex: new RegExp(searchTerms, "i") }
+        });
+
+        if (!pyqPapers || pyqPapers.length === 0) {
+            return res.json({ message: `No uploaded PYQ papers found for subject matching "${subject}". Please upload them in the dashboard under the exact subject name.` });
+        }
+
+        // 3. Combine Texts
+        let pyqTextCombined = '';
+        for (let i = 0; i < pyqPapers.length; i++) {
+            pyqTextCombined += `\n\n--- Paper ${i + 1} (${pyqPapers[i].filename}) ---\n${pyqPapers[i].originalText}`;
+        }
+        
+        // Truncate to avoid limits (approx 100k chars for safety)
+        pyqTextCombined = pyqTextCombined.substring(0, 150000);
+
+        // 4. Extract
+        const extractPrompt = `You are an expert tutor. I am providing you with multiple Previous Year Question Papers for the subject "${subject}".
+Extract all questions from these papers that are relevant to the topic: "${topic}".
+Group them logically with a markdown heading (e.g., "### ${topic} Questions").
+Format the output as a clean Markdown list. Keep only the questions.
+
+Previous Year Papers Text:
+${pyqTextCombined}`;
+
+        const extractResult = await model.generateContent(extractPrompt);
+        const extractResponseText = await extractResult.response.text();
+
+        res.json({ pyq: extractResponseText, subject: subject, topic: topic, sourcePapers: pyqPapers.map(p => p.filename) });
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Failed to extract PYQs: ' + err.message });
     }
 });
 
