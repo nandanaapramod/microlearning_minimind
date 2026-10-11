@@ -11,13 +11,10 @@ const { isAuthenticated } = require('../auth');
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
-// Initialize Gemini (or OpenAI)
-// TODO: User needs to set GEMINI_API_KEY in .env
+
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || 'your_api_key');
 
-// --- Developer PYQ Feature Routes (Public/Admin) ---
 
-// Upload PYQ PDF
 router.post('/pyq/upload', upload.single('document'), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
@@ -62,10 +59,10 @@ router.get('/pyq/papers', async (req, res) => {
     }
 });
 
-// --- Protected Routes ---
+
 router.use(isAuthenticated);
 
-// Upload and Process
+
 router.post('/upload', upload.single('document'), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
@@ -84,43 +81,44 @@ router.post('/upload', upload.single('document'), async (req, res) => {
             return res.status(400).json({ error: 'Could not extract enough text from file' });
         }
 
-        // AI Generation
-        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+        // AI Generation - Unified Prompt
+        const model = genAI.getGenerativeModel({ 
+            model: "gemini-2.5-flash",
+            generationConfig: { responseMimeType: "application/json" }
+        });
 
-        // 0. Validate if the document is actually Notes/Study Material
-        const validationPrompt = `Analyze the following text. Is this text primarily instructional study material, academic notes, a lecture transcript, or a textbook excerpt? Answer strictly with "YES" or "NO".\n\nText:\n${textCurent.substring(0, 3000)}`;
-        const validationResult = await model.generateContent(validationPrompt);
-        const isNotesText = (await validationResult.response.text()).trim().toUpperCase();
+        const combinedPrompt = `You are an expert AI tutor. Analyze the following text and perform three tasks:
+1. Determine if this text is primarily instructional study material, academic notes, a lecture transcript, or a textbook excerpt.
+2. Summarize the text into concise, easy-to-study notes using Markdown formatting. Use headers, bullet points, and bold text for key concepts.
+3. Generate a quiz with 5 multiple-choice questions based on the text.
 
-        if (!isNotesText.includes('YES')) {
+Respond ONLY with a JSON object in the exact structure below:
+{
+  "isValidAcademicMaterial": true,
+  "notesMarkdown": "your markdown notes here...",
+  "quiz": { "questions": [ { "question": "...", "options": ["...", "...", "...", "..."], "correctAnswer": "exact string match" } ] }
+}
+
+Text:
+${textCurent.substring(0, 30000)}`;
+
+        const result = await model.generateContent(combinedPrompt);
+        const responseText = await result.response.text();
+        const parsedResponse = JSON.parse(responseText);
+
+        if (!parsedResponse.isValidAcademicMaterial) {
             return res.status(400).json({ error: 'The uploaded file does not appear to be study notes or academic material. Please upload valid lecture notes or textbook excerpts.' });
         }
 
-        // 1. Generate Notes
-        const notePrompt = `Summarize the following text into concise, easy-to-study notes using Markdown formatting. Use headers, bullet points, and bold text for key concepts:\n\n${textCurent.substring(0, 30000)}`; // Limit char count
-        const noteResult = await model.generateContent(notePrompt);
-        const noteResponse = await noteResult.response;
-        const noteText = noteResponse.text();
-
-        // 2. Generate Quiz
-        const quizPrompt = `Generate a quiz with 5 multiple-choice questions based on the text. Return ONLY a JSON object with the following structure: 
-    { "questions": [ { "question": "...", "options": ["...", "...", "...", "..."], "correctAnswer": "exact string match" } ] }
-    \n\nText:\n${textCurent.substring(0, 30000)}`;
-
-        const quizResult = await model.generateContent(quizPrompt);
-        const quizResponse = await quizResult.response;
-        const quizText = quizResponse.text();
-
-        // Clean JSON markdown if present
-        const cleanJson = quizText.replace(/```json/g, '').replace(/```/g, '').trim();
-        const quizData = JSON.parse(cleanJson);
+        const noteText = parsedResponse.notesMarkdown;
+        const quizData = parsedResponse.quiz;
 
         // Save to DB
         const note = new Note({
             userId: req.session.userId,
             title: req.file.originalname,
             content: noteText,
-            originalText: textCurent // Optional, maybe truncate
+            originalText: textCurent
         });
         await note.save();
 
@@ -136,7 +134,11 @@ router.post('/upload', upload.single('document'), async (req, res) => {
 
     } catch (err) {
         console.error(err);
-        res.status(500).json({ error: 'Error processing document: ' + err.message });
+        let errorMsg = 'Error processing document: ' + err.message;
+        if (err.message && err.message.includes('429')) {
+            errorMsg = 'AI Rate Limit Reached. Please wait 1 minute and try again.';
+        }
+        res.status(500).json({ error: errorMsg });
     }
 });
 
@@ -262,7 +264,11 @@ router.post('/chat', async (req, res) => {
 
     } catch (err) {
         console.error(err);
-        res.status(500).json({ error: 'Chat error: ' + err.message });
+        let errorMsg = 'Chat error: ' + err.message;
+        if (err.message && err.message.includes('429')) {
+            errorMsg = 'AI Rate Limit Reached. Please wait 1 minute and try again.';
+        }
+        res.status(500).json({ error: errorMsg });
     }
 });
 
@@ -275,6 +281,10 @@ router.post('/pyq', async (req, res) => {
         const note = await Note.findById(noteId);
 
         if (!note) return res.status(404).json({ error: 'Note not found' });
+
+        if (note.generatedPyq) {
+            return res.json({ pyq: note.generatedPyq });
+        }
 
         const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
@@ -290,9 +300,16 @@ router.post('/pyq', async (req, res) => {
 
         res.json({ pyq: text });
 
+        note.generatedPyq = text;
+        await note.save();
+
     } catch (err) {
         console.error(err);
-        res.status(500).json({ error: 'PYQ generation error: ' + err.message });
+        let errorMsg = 'PYQ generation error: ' + err.message;
+        if (err.message && err.message.includes('429')) {
+            errorMsg = 'AI Rate Limit Reached. Please wait 1 minute and try again.';
+        }
+        res.status(500).json({ error: errorMsg });
     }
 });
 
@@ -335,9 +352,18 @@ router.post('/pyq/extract', async (req, res) => {
         const note = await Note.findById(noteId);
         if (!note) return res.status(404).json({ error: 'Note not found' });
 
+        if (note.extractedPyq) {
+            try {
+                const cachedData = JSON.parse(note.extractedPyq);
+                return res.json(cachedData);
+            } catch (e) {
+                console.error('Failed to parse cached extracted PYQ', e);
+            }
+        }
+
         const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
-        // 1. Identify Subject and Topic
+        
         const identifyPrompt = `Given the following note title and content, deduce the Subject and the specific Module/Topic. 
 Respond in strict JSON format: {"subject": "string", "topic": "string"}. 
 Note Title: ${note.title}
@@ -357,9 +383,7 @@ Content: ${note.content.substring(0, 5000)}`;
             return res.status(500).json({ error: "Failed to identify subject and topic." });
         }
 
-        // 2. Fetch PYQ Papers (simple case insensitive regex on subject)
-        // If subject is "Compiler Design", we look for "compiler" or "design" in stored papers?
-        // Let's do a loose word match to be safe.
+       
         const searchTerms = subject.split(' ').filter(w => w.length > 3).join('|');
         const pyqPapers = await PyqPaper.find({
             subject: { $regex: new RegExp(searchTerms, "i") }
@@ -375,10 +399,10 @@ Content: ${note.content.substring(0, 5000)}`;
             pyqTextCombined += `\n\n--- Paper ${i + 1} (${pyqPapers[i].filename}) ---\n${pyqPapers[i].originalText}`;
         }
         
-        // Truncate to avoid limits (approx 100k chars for safety)
+       
         pyqTextCombined = pyqTextCombined.substring(0, 150000);
 
-        // 4. Extract
+        
         const extractPrompt = `You are an expert tutor. I am providing you with multiple Previous Year Question Papers for the subject "${subject}".
 Extract all questions from these papers that are relevant to the topic: "${topic}".
 Group them logically with a markdown heading (e.g., "### ${topic} Questions").
@@ -390,11 +414,19 @@ ${pyqTextCombined}`;
         const extractResult = await model.generateContent(extractPrompt);
         const extractResponseText = await extractResult.response.text();
 
-        res.json({ pyq: extractResponseText, subject: subject, topic: topic, sourcePapers: pyqPapers.map(p => p.filename) });
+        const responseData = { pyq: extractResponseText, subject: subject, topic: topic, sourcePapers: pyqPapers.map(p => p.filename) };
+        res.json(responseData);
+        
+        note.extractedPyq = JSON.stringify(responseData);
+        await note.save();
 
     } catch (err) {
         console.error(err);
-        res.status(500).json({ error: 'Failed to extract PYQs: ' + err.message });
+        let errorMsg = 'Failed to extract PYQs: ' + err.message;
+        if (err.message && err.message.includes('429')) {
+            errorMsg = 'AI Rate Limit Reached. Please wait 1 minute and try again.';
+        }
+        res.status(500).json({ error: errorMsg });
     }
 });
 
